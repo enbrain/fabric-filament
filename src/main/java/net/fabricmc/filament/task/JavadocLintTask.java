@@ -125,7 +125,7 @@ public abstract class JavadocLintTask extends DefaultTask {
 
 						if (entry instanceof LocalVariableEntry && ((LocalVariableEntry) entry).isArgument()) {
 							if (javadoc.endsWith(".")) {
-								localErrors.add("parameter javadoc ends with '.'");
+								// localErrors.add("parameter javadoc ends with '.'");
 							}
 
 							if (Character.isUpperCase(javadoc.charAt(0))) {
@@ -133,17 +133,21 @@ public abstract class JavadocLintTask extends DefaultTask {
 
 								// ignore single-letter "words" (like X or Z)
 								if (word.length() > 1) {
-									localErrors.add("parameter javadoc starts with uppercase word '" + word + "'");
+									// localErrors.add("parameter javadoc starts with uppercase word '" + word + "'");
 								}
 							}
 						} else if (entry instanceof MethodEntry) {
 							if (javadoc.lines().anyMatch(JavadocLintTask::isRegularMethodParameter)) {
-								localErrors.add("method javadoc contains parameter docs, which should be on the parameter itself");
+								// localErrors.add("method javadoc contains parameter docs, which should be on the parameter itself");
 							}
 						}
 
 						if (javadoc.contains("</p>")) {
-							localErrors.add("javadoc contains unnecessary paragraph ending tag");
+							// localErrors.add("javadoc contains unnecessary paragraph ending tag");
+						}
+
+						if (javadoc.endsWith("\n")) {
+							localErrors.add("javadoc ends with empty line");
 						}
 
 						// new rules can be added here in the future
