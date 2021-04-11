@@ -5,7 +5,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Pattern;
 
 import javax.inject.Inject;
 
@@ -18,7 +17,6 @@ import cuchaz.enigma.translation.mapping.serde.enigma.EnigmaMappingsReader;
 import cuchaz.enigma.translation.mapping.tree.EntryTree;
 import cuchaz.enigma.translation.representation.entry.Entry;
 import cuchaz.enigma.translation.representation.entry.LocalVariableEntry;
-import cuchaz.enigma.translation.representation.entry.MethodEntry;
 import org.gradle.api.DefaultTask;
 import org.gradle.api.GradleException;
 import org.gradle.api.file.DirectoryProperty;
@@ -38,8 +36,7 @@ import org.gradle.workers.WorkerExecutor;
 
 import net.fabricmc.filament.util.FileUtil;
 
-public abstract class JavadocLintTask extends DefaultTask {
-	private static final Pattern PARAM_DOC_LINE = Pattern.compile("^@param\\s+[^<].*$");
+public abstract class MappingLintTask extends DefaultTask {
 	private final DirectoryProperty mappingDirectory = getProject().getObjects().directoryProperty();
 
 	@Incremental
@@ -48,7 +45,7 @@ public abstract class JavadocLintTask extends DefaultTask {
 		return mappingDirectory;
 	}
 
-	public JavadocLintTask() {
+	public MappingLintTask() {
 		// Ignore outputs for up-to-date checks as there aren't any (so only inputs are checked)
 		getOutputs().upToDateWhen(task -> true);
 	}
@@ -59,7 +56,7 @@ public abstract class JavadocLintTask extends DefaultTask {
 	@TaskAction
 	public void run(InputChanges changes) throws IOException {
 		Path directory = mappingDirectory.getAsFile().get().toPath();
-		Path tempMappingDirectory = Files.createTempDirectory("javadocLintMappings");
+		Path tempMappingDirectory = Files.createTempDirectory("mappingLintMappings");
 		Files.createDirectories(tempMappingDirectory);
 
 		for (FileChange change : changes.getFileChanges(mappingDirectory)) {
@@ -78,17 +75,8 @@ public abstract class JavadocLintTask extends DefaultTask {
 		FileUtil.deleteDirectory(tempMappingDirectory.toFile());
 	}
 
-	private static boolean isRegularMethodParameter(String line) {
-		return PARAM_DOC_LINE.matcher(line).matches();
-	}
-
-	private static String getFirstWord(String str) {
-		int i = str.indexOf(' ');
-		return i != -1 ? str.substring(0, i) : str;
-	}
-
 	private static String getFullName(EntryTree<EntryMapping> mappings, Entry<?> entry) {
-		String name = mappings.get(entry).getTargetName();
+		String name = mappings.get(entry) != null ? mappings.get(entry).getTargetName() : entry.getName();
 
 		if (entry.getParent() != null) {
 			name = getFullName(mappings, entry.getParent()) + '.' + name;
@@ -117,43 +105,27 @@ public abstract class JavadocLintTask extends DefaultTask {
 				List<String> errors = new ArrayList<>();
 
 				mappings.getAllEntries().parallel().forEach(entry -> {
-					EntryMapping mapping = mappings.get(entry);
-					String javadoc = mapping.getJavadoc();
+					List<String> localErrors = new ArrayList<>();
 
-					if (javadoc != null && !javadoc.isEmpty()) {
-						List<String> localErrors = new ArrayList<>();
+					if (entry instanceof LocalVariableEntry && ((LocalVariableEntry) entry).isArgument()) {
+						if (((LocalVariableEntry) entry).getParent() != null) {
+							String methodName = ((LocalVariableEntry) entry).getParent().getName();
 
-						if (entry instanceof LocalVariableEntry && ((LocalVariableEntry) entry).isArgument()) {
-							if (javadoc.endsWith(".")) {
-								localErrors.add("parameter javadoc ends with '.'");
-							}
+							if (methodName != null && methodName.equals("equals")) {
+								String paramName = mappings.get(entry).getTargetName();
 
-							if (Character.isUpperCase(javadoc.charAt(0))) {
-								String word = getFirstWord(javadoc);
-
-								// ignore single-letter "words" (like X or Z)
-								if (word.length() > 1) {
-									localErrors.add("parameter javadoc starts with uppercase word '" + word + "'");
+								if (paramName != null && !paramName.equals("o")) {
+									localErrors.add("parameter of equals method should be 'o'");
 								}
 							}
-						} else if (entry instanceof MethodEntry) {
-							if (javadoc.lines().anyMatch(JavadocLintTask::isRegularMethodParameter)) {
-								localErrors.add("method javadoc contains parameter docs, which should be on the parameter itself");
-							}
 						}
+					}
 
-						if (javadoc.contains("</p>")) {
-							localErrors.add("javadoc contains unnecessary paragraph ending tag");
-						}
+					if (!localErrors.isEmpty()) {
+						String name = getFullName(mappings, entry);
 
-						// new rules can be added here in the future
-
-						if (!localErrors.isEmpty()) {
-							String name = getFullName(mappings, entry);
-
-							for (String error : localErrors) {
-								errors.add(name + ": " + error);
-							}
+						for (String error : localErrors) {
+							errors.add(name + ": " + error);
 						}
 					}
 				});
@@ -163,7 +135,7 @@ public abstract class JavadocLintTask extends DefaultTask {
 						LOGGER.error("lint: {}", error);
 					}
 
-					throw new GradleException("Found " + errors.size() + " javadoc format errors! See the log for details.");
+					throw new GradleException("Found " + errors.size() + " mapping errors! See the log for details.");
 				}
 			} catch (IOException | MappingParseException e) {
 				throw new GradleException("Could not read and parse mappings", e);

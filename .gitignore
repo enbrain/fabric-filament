@@ -16,6 +16,9 @@
 *.ipr
 *.iws
 
+# VSCode
+.vscode
+
 # Build artifacts
 bin/
 build/

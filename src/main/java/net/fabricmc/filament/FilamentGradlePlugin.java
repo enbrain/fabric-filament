@@ -5,11 +5,13 @@ import org.gradle.api.Project;
 
 import net.fabricmc.filament.task.GeneratePackageInfoMappingsTask;
 import net.fabricmc.filament.task.JavadocLintTask;
+import net.fabricmc.filament.task.MappingLintTask;
 
 public final class FilamentGradlePlugin implements Plugin<Project> {
 	@Override
 	public void apply(Project project) {
 		project.getTasks().register("generatePackageInfoMappings", GeneratePackageInfoMappingsTask.class);
 		project.getTasks().register("javadocLint", JavadocLintTask.class);
+		project.getTasks().register("mappingLint", MappingLintTask.class);
 	}
 }
